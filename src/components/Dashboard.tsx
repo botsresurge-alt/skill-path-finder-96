@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +11,13 @@ import {
   TrendingUp, 
   Star,
   Filter,
-  Search
+  Search,
+  RefreshCw
 } from "lucide-react";
 import JobCard from "./JobCard";
 import LearningPath from "./LearningPath";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface DashboardProps {
   userProfile: any;
@@ -23,9 +26,52 @@ interface DashboardProps {
 const Dashboard = ({ userProfile }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState("jobs");
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
+  const [jobSuggestions, setJobSuggestions] = useState<any[]>([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const { toast } = useToast();
 
-  // Mock job suggestions based on user profile
-  const jobSuggestions = [
+  useEffect(() => {
+    loadJobSuggestions();
+  }, []);
+
+  const loadJobSuggestions = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase
+        .from('job_suggestions')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedJobs = data.map(job => ({
+        id: job.id,
+        title: job.job_title,
+        company: job.company || 'Various Companies',
+        location: job.location || 'Remote',
+        salary: job.salary_range || 'Competitive',
+        type: job.job_type || 'Full-time',
+        matchPercentage: job.match_percentage,
+        reason: job.reason,
+        requiredSkills: job.required_skills || [],
+        description: job.description || '',
+        posted: new Date(job.created_at).toLocaleDateString()
+      }));
+
+      setJobSuggestions(formattedJobs);
+    } catch (error: any) {
+      console.error('Error loading job suggestions:', error);
+      toast({
+        title: "Error loading jobs",
+        description: "Using demo data instead",
+        variant: "destructive",
+      });
+      
+      // Fallback to mock data
+      setJobSuggestions([
     {
       id: "1",
       title: "Frontend Developer",
@@ -78,7 +124,42 @@ const Dashboard = ({ userProfile }: DashboardProps) => {
       description: "Analyze complex datasets and build machine learning models to drive business insights and decisions.",
       posted: "5 days ago"
     }
-  ];
+      ]);
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
+
+  const refreshJobSuggestions = async () => {
+    setIsLoadingJobs(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Trigger AI suggestions again
+      const { error } = await supabase.functions.invoke('suggest-jobs', {
+        body: { profile: userProfile }
+      });
+
+      if (error) throw error;
+
+      // Reload suggestions
+      await loadJobSuggestions();
+      
+      toast({
+        title: "Jobs refreshed!",
+        description: "New AI-powered suggestions loaded",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error refreshing jobs",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
 
   const handleSaveJob = (jobId: string) => {
     setSavedJobs(prev => 
@@ -187,25 +268,50 @@ const Dashboard = ({ userProfile }: DashboardProps) => {
                 <Search className="h-4 w-4 mr-2" />
                 Search
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={refreshJobSuggestions}
+                disabled={isLoadingJobs}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingJobs ? 'animate-spin' : ''}`} />
+                {isLoadingJobs ? 'Loading...' : 'Refresh AI Jobs'}
+              </Button>
               <div className="flex gap-2 ml-auto">
                 <Badge variant="secondary">All ({jobSuggestions.length})</Badge>
-                <Badge variant="outline">High Match (2)</Badge>
-                <Badge variant="outline">Remote (1)</Badge>
+                <Badge variant="outline">High Match ({jobSuggestions.filter(j => j.matchPercentage >= 80).length})</Badge>
+                <Badge variant="outline">Remote ({jobSuggestions.filter(j => j.location.toLowerCase().includes('remote')).length})</Badge>
               </div>
             </div>
 
             {/* Job Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {jobSuggestions.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  onSave={handleSaveJob}
-                  onViewDetails={handleViewJobDetails}
-                  onGetLearning={handleGetLearning}
-                />
-              ))}
-            </div>
+            {isLoadingJobs ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Loading AI-powered job suggestions...</p>
+              </div>
+            ) : jobSuggestions.length === 0 ? (
+              <div className="text-center py-8">
+                <Briefcase className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No job suggestions yet</h3>
+                <p className="text-muted-foreground mb-4">Complete your profile to get AI-powered job recommendations</p>
+                <Button onClick={refreshJobSuggestions} variant="hero">
+                  Generate Job Suggestions
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {jobSuggestions.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    onSave={handleSaveJob}
+                    onViewDetails={handleViewJobDetails}
+                    onGetLearning={handleGetLearning}
+                  />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="learning">

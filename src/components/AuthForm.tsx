@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface AuthFormProps {
   onAuthSuccess: () => void;
@@ -12,16 +14,56 @@ interface AuthFormProps {
 
 const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent, isSignUp = false) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate auth process
-    setTimeout(() => {
+    const formData = new FormData(e.target as HTMLFormElement);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const name = formData.get('name') as string;
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              full_name: name,
+            }
+          }
+        });
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Account created!",
+          description: "Please check your email to verify your account.",
+        });
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (error) throw error;
+        
+        onAuthSuccess();
+      }
+    } catch (error: any) {
+      toast({
+        title: "Authentication failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-      onAuthSuccess();
-    }, 1500);
+    }
   };
 
   return (
@@ -36,20 +78,21 @@ const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
           </CardHeader>
           
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
               
               <TabsContent value="login">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={(e) => handleAuth(e, false)} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="email"
+                        name="email"
                         type="email"
                         placeholder="your@email.com"
                         className="pl-9"
@@ -64,6 +107,7 @@ const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="password"
+                        name="password"
                         type="password"
                         placeholder="••••••••"
                         className="pl-9"
@@ -85,13 +129,14 @@ const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
               </TabsContent>
               
               <TabsContent value="signup">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={(e) => handleAuth(e, true)} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="name"
+                        name="name"
                         type="text"
                         placeholder="John Doe"
                         className="pl-9"
@@ -106,6 +151,7 @@ const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signup-email"
+                        name="email"
                         type="email"
                         placeholder="your@email.com"
                         className="pl-9"
@@ -120,6 +166,7 @@ const AuthForm = ({ onAuthSuccess }: AuthFormProps) => {
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signup-password"
+                        name="password"
                         type="password"
                         placeholder="••••••••"
                         className="pl-9"

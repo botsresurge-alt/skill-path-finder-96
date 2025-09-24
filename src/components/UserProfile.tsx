@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, GraduationCap, Code, Heart, Upload, X, Plus } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface UserProfileProps {
   onComplete: (profile: any) => void;
@@ -24,6 +26,24 @@ const UserProfile = ({ onComplete }: UserProfileProps) => {
   
   const [newSkill, setNewSkill] = useState("");
   const [newInterest, setNewInterest] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in to continue",
+          variant: "destructive",
+        });
+        return;
+      }
+    };
+    checkUser();
+  }, [toast]);
 
   const handleSkillAdd = () => {
     if (newSkill.trim() && !profile.skills.includes(newSkill.trim())) {
@@ -59,9 +79,56 @@ const UserProfile = ({ onComplete }: UserProfileProps) => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onComplete(profile);
+    setIsLoading(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      // Save profile to database
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: session.user.id,
+          name: profile.name,
+          education: profile.education,
+          specialization: profile.specialization,
+          skills: profile.skills,
+          interests: profile.interests,
+        });
+
+      if (profileError) throw profileError;
+
+      // Get AI job suggestions
+      const { error: aiError } = await supabase.functions.invoke('suggest-jobs', {
+        body: { profile }
+      });
+
+      if (aiError) {
+        console.error('AI suggestions error:', aiError);
+        // Continue even if AI fails
+      }
+
+      toast({
+        title: "Profile saved!",
+        description: "Getting your personalized job suggestions...",
+      });
+
+      onComplete(profile);
+    } catch (error: any) {
+      console.error('Profile save error:', error);
+      toast({
+        title: "Error saving profile",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,9 +298,9 @@ const UserProfile = ({ onComplete }: UserProfileProps) => {
                 type="submit" 
                 variant="hero" 
                 className="w-full"
-                disabled={!profile.name || !profile.education || profile.skills.length === 0}
+                disabled={!profile.name || !profile.education || profile.skills.length === 0 || isLoading}
               >
-                Complete Profile & Get Job Suggestions
+                {isLoading ? "Generating AI Suggestions..." : "Complete Profile & Get Job Suggestions"}
               </Button>
             </form>
           </CardContent>
