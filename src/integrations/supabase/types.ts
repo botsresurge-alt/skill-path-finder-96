@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      job_suggestions: {
+        Row: {
+          company: string | null
+          created_at: string
+          description: string | null
+          id: string
+          job_title: string
+          job_type: string | null
+          location: string | null
+          match_percentage: number
+          reason: string
+          required_skills: string[] | null
+          salary_range: string | null
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          job_title: string
+          job_type?: string | null
+          location?: string | null
+          match_percentage: number
+          reason: string
+          required_skills?: string[] | null
+          salary_range?: string | null
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          job_title?: string
+          job_type?: string | null
+          location?: string | null
+          match_percentage?: number
+          reason?: string
+          required_skills?: string[] | null
+          salary_range?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          education: string | null
+          id: string
+          interests: string[] | null
+          name: string
+          resume_text: string | null
+          skills: string[] | null
+          specialization: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          education?: string | null
+          id?: string
+          interests?: string[] | null
+          name: string
+          resume_text?: string | null
+          skills?: string[] | null
+          specialization?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          education?: string | null
+          id?: string
+          interests?: string[] | null
+          name?: string
+          resume_text?: string | null
+          skills?: string[] | null
+          specialization?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
